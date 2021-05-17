@@ -5,10 +5,10 @@ const crypto = require('crypto');
 const district_ids = require('./districts.json');
 console.log(district_ids["Indore"])
 const config = {
-    mobile: 8319401394, // format 10-digit number
-    date: "17-05-2021", // format dd-mm-yyyy only
-    district_id: district_ids["Indore"],   // Indore - change this for your district
-    center_id: []     // IMPORTANT that you specify the array of center_id to choose from
+    mobile: 874859623, // format 10-digit number
+    date: "18-05-2021", // format dd-mm-yyyy only
+    district_id: district_ids["New Delhi"],   // Indore - change this for your district
+    center_id: [618408, 669412]     // IMPORTANT that you specify the array of center_id to choose from
                                             // otherwise any available center from district will be booked.
 }
 
@@ -140,8 +140,7 @@ let cowinApi = {
                 resolve(JSON.parse(response.body));
             });
         });
-    },
-
+    }
 }
 
 cowinApi.generateMobileOTP().then(data => {
@@ -161,7 +160,6 @@ cowinApi.generateMobileOTP().then(data => {
 }).catch(err => {
     console.log(err);
 });
-
 async function start() {
     try {
         let response = await cowinApi.getBeneficiaries();
