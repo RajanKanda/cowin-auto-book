@@ -1,21 +1,27 @@
 const readline = require("readline");
 const request = require('request');
 const crypto = require('crypto');
+const fs = require('fs');
+require('dotenv').config();
 
 const district_ids = require('./districts.json');
-console.log(district_ids["Indore"])
+
 const config = {
-    mobile: 874859623, // format 10-digit number
-    date: "18-05-2021", // format dd-mm-yyyy only
-    district_id: district_ids["New Delhi"],   // Indore - change this for your district
-    center_id: [618408, 669412]     // IMPORTANT that you specify the array of center_id to choose from
-                                            // otherwise any available center from district will be booked.
+    mobile: process.env.MOBILE_NUMBER,                  // format 10-digit number
+    date: "19-05-2021",                                 // format dd-mm-yyyy only
+    district_id: district_ids[process.env.DISTRICT],    // change this for your district
+    
+    center_id: [658404, 669518, 698085, 618408, 666568, 669412, 570742, 695040, 561406]
+    // IMPORTANT that you specify the array of center_id to choose from
+    // otherwise any available center from district will be booked.
 }
+let available_sessions = [];
 
 
 let cowinApi = {
     isAuthenticated: false,
     token: "",
+    captcha: "",
     findByDistrict: function () {
         return new Promise(function (resolve, reject) {
             if (!cowinApi.isAuthenticated) {
@@ -125,7 +131,8 @@ let cowinApi = {
                     "dose": 1,
                     "session_id": session_id,
                     "slot": slot,
-                    "beneficiaries": beneficiaries
+                    "beneficiaries": beneficiaries,
+                    "captcha": cowinApi.captcha
                   })
             }, function (error, response) {
                 if (error) {
@@ -140,7 +147,35 @@ let cowinApi = {
                 resolve(JSON.parse(response.body));
             });
         });
+    },
+    getRecaptcha: function () {
+        return new Promise(function (resolve, reject) {
+            if (!cowinApi.isAuthenticated) {
+                return reject(new Error("Unauthenticated"));
+            }
+            request({
+                'method': 'POST',
+                'url': `https://cdn-api.co-vin.in/api/v2/auth/getRecaptcha`,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${cowinApi.token}`
+                },
+                'body': JSON.stringify({})
+            }, function (error, response) {
+                if (error) {
+                    return reject(error);
+                }
+                if (response.statusCode != 200) {
+                    cowinApi.isAuthenticated = false;
+                    cowinApi.token = "";
+                    console.log(response);
+                    return reject(new Error("Unauthenticated"));
+                }
+                resolve(JSON.parse(response.body));
+            });
+        });
     }
+
 }
 
 cowinApi.generateMobileOTP().then(data => {
@@ -149,10 +184,20 @@ cowinApi.generateMobileOTP().then(data => {
         output: process.stdout
     });
     rl.question("Enter OTP (expires in 3 mins): ", function (otp) {
-        rl.close();
         cowinApi.validateMobileOtp(otp, data.txnId).then(data => {
             console.log("Authenticated");
-            start();
+            cowinApi.getRecaptcha().then(data => {
+                console.log("Saving ecaptcha");
+                fs.writeFileSync('./captcha.svg', data.captcha);
+                require('child_process').exec((process.platform == 'darwin'? 'open': process.platform == 'win32'? 'start': 'xdg-open') + './captcha.svg');
+                rl.question("Please enter captcha: ", function(captcha) {
+                    rl.close();
+                    cowinApi.captcha = captcha;
+                    start();
+                })
+            }).catch(err => {
+                console.log(err);
+            })
         }).catch(err => {
             console.log(err);
         })
@@ -168,9 +213,10 @@ async function start() {
         console.log("Total Beneficiaries: ", beneficiaries.length);
 
         let interval = setInterval(async function () {
+            console.log((new Date()).toLocaleString());
             try {
                 response = await cowinApi.findByDistrict();
-                console.log(response);
+                // console.log(response);
                 let sessions = response.sessions.filter(session => {
                 if(config.center_id.length == 0) {
                     return session.available_capacity_dose1 > 0 && session.min_age_limit == 18
@@ -180,10 +226,11 @@ async function start() {
             });
             console.log(sessions);
             console.log(`Total session available: `, sessions.length);
+            available_sessions.push(sessions);
 
             for (let session of sessions) {
                 try {
-                    let response = await cowinApi.schedule(session.session_id, session.slot[0], beneficiaries);
+                    let response = await cowinApi.schedule(session.session_id, session.slots[0], [beneficiaries[1]]);
                     if (response.appointment_id != undefined) {
                         console.log('Booked');
                         console.log(response);
@@ -191,24 +238,24 @@ async function start() {
                         break;
                     }
                 } catch (error) {
-                    console.log(error);
+                    // console.log(error);
                     if(error.message == "Unauthenticated") {
-                        console.log("Please rerun utility");
+                        console.log("Unauthenticated - Please rerun utility - cant book appointment");
                     }
                 }
                 }
 
             } catch (error) {
-                console.log(error);
+                // console.log(error);
                 if (error.message == "Unauthenticated") {
-                    console.log("Please rerun utility");
+                    console.log("Unauthenticated - Please rerun utility - cant find sessions");
                 }
             }
-        }, 3000)
+        }, 5000)
 
 
 
     } catch (error) {
-        console.log(error);
+        // console.log(error);
     }
 }
