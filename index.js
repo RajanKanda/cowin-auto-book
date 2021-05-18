@@ -230,7 +230,7 @@ async function start() {
 
             for (let session of sessions) {
                 try {
-                    let response = await cowinApi.schedule(session.session_id, session.slots[0], [beneficiaries[1]]);
+                    let response = await cowinApi.schedule(session.session_id, session.slots[0], [beneficiaries[0]]);
                     if (response.appointment_id != undefined) {
                         console.log('Booked');
                         console.log(response);
